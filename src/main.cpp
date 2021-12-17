@@ -96,12 +96,14 @@ int main(int argc,char **argv)
             initcondstr[0].compare("basis")    == 0  ) {
     /* Compute ninit = dim(subsystem defined by list of oscil IDs) */
     ninit = 1;
+    // sanity check for input string
     if (initcondstr.size() < 2) {
       printf("ERROR for initial condition option: If choosing 'basis' or 'diagonal', specify the list oscillator IDs!\n");
       exit(1);
     }
     for (int i = 1; i<initcondstr.size(); i++){
       int oscilID = atoi(initcondstr[i].c_str());
+      assert(oscilID < nessential.size());
       ninit *= nessential[oscilID]; // essential levels only
     }
     if (initcondstr[0].compare("basis") == 0  ) ninit = (int) pow(ninit,2.0);
