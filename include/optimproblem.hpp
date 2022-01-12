@@ -53,16 +53,16 @@ class OptimProblem {
   std::string initguess_type;      /* Type of initial guess */
   std::vector<double> initguess_amplitudes; /* Initial amplitudes of controles, or NULL */
   double* mygrad;  /* Auxiliary */
-  
-  public: 
+
+  public:
     Output* output;                 /* Store a reference to the output */
     TimeStepper* timestepper;       /* Store a reference to the time-stepping scheme */
     Vec xlower, xupper;              /* Optimization bounds */
 
   /* Constructor */
-  OptimProblem(MapParam config, TimeStepper* timestepper_, MPI_Comm comm_init_, int ninit_, std::vector<double> gate_rot_freq, Output* output_);
+  OptimProblem(MapParam config, TimeStepper* timestepper_, MPI_Comm comm_init_, int ninit_, std::vector<double> gate_rot_freq, double gate_param, Output* output_);
 #ifdef WITH_BRAID
-  OptimProblem(MapParam config, TimeStepper* timestepper_, myBraidApp* primalbraidapp_, myAdjointBraidApp* adjointbraidapp_, MPI_Comm comm_init_, int ninit_, std::vector<double> gate_rot_freq, Output* output_);
+  OptimProblem(MapParam config, TimeStepper* timestepper_, myBraidApp* primalbraidapp_, myAdjointBraidApp* adjointbraidapp_, MPI_Comm comm_init_, int ninit_, std::vector<double> gate_rot_freq, double gate_param, Output* output_);
 #endif
   ~OptimProblem();
 
