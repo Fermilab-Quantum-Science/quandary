@@ -1,7 +1,7 @@
 #include "optimproblem.hpp"
 
 #ifdef WITH_BRAID
-OptimProblem::OptimProblem(MapParam config, TimeStepper* timestepper_, myBraidApp* primalbraidapp_, myAdjointBraidApp* adjointbraidapp_, MPI_Comm comm_init_, int ninit_, std::vector<double> gate_rot_freq, Output* output_) : OptimProblem(config, timestepper_, comm_init_, ninit_, gate_rot_freq, output_) {
+OptimProblem::OptimProblem(MapParam config, TimeStepper* timestepper_, myBraidApp* primalbraidapp_, myAdjointBraidApp* adjointbraidapp_, MPI_Comm comm_init_, int ninit_, std::vector<double> gate_rot_freq, double gate_param, Output* output_) : OptimProblem(config, timestepper_, comm_init_, ninit_, gate_rot_freq, gate_param, output_) {
   primalbraidapp  = primalbraidapp_;
   adjointbraidapp = adjointbraidapp_;
   MPI_Comm_rank(primalbraidapp->comm_braid, &mpirank_braid);
@@ -9,7 +9,7 @@ OptimProblem::OptimProblem(MapParam config, TimeStepper* timestepper_, myBraidAp
 }
 #endif
 
-OptimProblem::OptimProblem(MapParam config, TimeStepper* timestepper_, MPI_Comm comm_init_, int ninit_, std::vector<double> gate_rot_freq, Output* output_){
+OptimProblem::OptimProblem(MapParam config, TimeStepper* timestepper_, MPI_Comm comm_init_, int ninit_, std::vector<double> gate_rot_freq, double gate_param, Output* output_){
 
   timestepper = timestepper_;
   ninit = ninit_;
@@ -29,12 +29,12 @@ OptimProblem::OptimProblem(MapParam config, TimeStepper* timestepper_, MPI_Comm 
   mpisize_braid = 1;
 
   /* Store number of initial conditions per init-processor group */
-  ninit_local = ninit / mpisize_init; 
+  ninit_local = ninit / mpisize_init;
 
   /* Store number of design parameters */
   int n = 0;
   for (int ioscil = 0; ioscil < timestepper->mastereq->getNOscillators(); ioscil++) {
-      n += timestepper->mastereq->getOscillator(ioscil)->getNParams(); 
+      n += timestepper->mastereq->getOscillator(ioscil)->getNParams();
   }
   ndesign = n;
   if (mpirank_world == 0) std::cout<< "ndesign = " << ndesign << std::endl;
@@ -47,7 +47,7 @@ OptimProblem::OptimProblem(MapParam config, TimeStepper* timestepper_, MPI_Comm 
   initguess_type = config.GetStrParam("optim_init", "zero");
   config.GetVecDoubleParam("optim_init_ampl", initguess_amplitudes, 0.0);
   // sanity check
-  if (initguess_type.compare("constant") == 0 || 
+  if (initguess_type.compare("constant") == 0 ||
       initguess_type.compare("random")    == 0 ||
       initguess_type.compare("random_seed") == 0)  {
       if (initguess_amplitudes.size() < timestepper->mastereq->getNOscillators()) {
@@ -62,7 +62,7 @@ OptimProblem::OptimProblem(MapParam config, TimeStepper* timestepper_, MPI_Comm 
   int purestateID = -1;
   std::string target_filename = "";
   TargetType target_type;
-  // Read from config file 
+  // Read from config file
   config.GetVecStrParam("optim_target", target_str, "pure");
   if ( target_str[0].compare("gate") ==0 ) {
     target_type = TargetType::GATE;
@@ -72,20 +72,21 @@ OptimProblem::OptimProblem(MapParam config, TimeStepper* timestepper_, MPI_Comm 
       exit(1);
     }
     if      (target_str[1].compare("none") == 0)  targetgate = new Gate(); // dummy gate. do nothing
-    else if (target_str[1].compare("xgate") == 0) targetgate = new XGate(timestepper->mastereq->nlevels, timestepper->mastereq->nessential, timestepper->total_time, gate_rot_freq); 
-    else if (target_str[1].compare("ygate") == 0) targetgate = new YGate(timestepper->mastereq->nlevels, timestepper->mastereq->nessential, timestepper->total_time, gate_rot_freq); 
-    else if (target_str[1].compare("zgate") == 0) targetgate = new ZGate(timestepper->mastereq->nlevels, timestepper->mastereq->nessential, timestepper->total_time, gate_rot_freq);
-    else if (target_str[1].compare("hadamard") == 0) targetgate = new HadamardGate(timestepper->mastereq->nlevels, timestepper->mastereq->nessential, timestepper->total_time, gate_rot_freq);
-    else if (target_str[1].compare("cnot") == 0) targetgate = new CNOT(timestepper->mastereq->nlevels, timestepper->mastereq->nessential, timestepper->total_time, gate_rot_freq); 
-    else if (target_str[1].compare("swap") == 0) targetgate = new SWAP(timestepper->mastereq->nlevels, timestepper->mastereq->nessential, timestepper->total_time, gate_rot_freq); 
-    else if (target_str[1].compare("swap0q") == 0) targetgate = new SWAP_0Q(timestepper->mastereq->nlevels, timestepper->mastereq->nessential, timestepper->total_time, gate_rot_freq); 
-    else if (target_str[1].compare("cqnot") == 0) targetgate = new CQNOT(timestepper->mastereq->nlevels, timestepper->mastereq->nessential, timestepper->total_time, gate_rot_freq); 
+    else if (target_str[1].compare("xgate") == 0) targetgate = new XGate(timestepper->mastereq->nlevels, timestepper->mastereq->nessential, timestepper->total_time, gate_rot_freq, gate_param);
+    else if (target_str[1].compare("ygate") == 0) targetgate = new YGate(timestepper->mastereq->nlevels, timestepper->mastereq->nessential, timestepper->total_time, gate_rot_freq, gate_param);
+    else if (target_str[1].compare("zgate") == 0) targetgate = new ZGate(timestepper->mastereq->nlevels, timestepper->mastereq->nessential, timestepper->total_time, gate_rot_freq, gate_param);
+    else if (target_str[1].compare("hadamard") == 0) targetgate = new HadamardGate(timestepper->mastereq->nlevels, timestepper->mastereq->nessential, timestepper->total_time, gate_rot_freq, gate_param);
+    else if (target_str[1].compare("cnot") == 0) targetgate = new CNOT(timestepper->mastereq->nlevels, timestepper->mastereq->nessential, timestepper->total_time, gate_rot_freq, gate_param);
+    else if (target_str[1].compare("swap") == 0) targetgate = new SWAP(timestepper->mastereq->nlevels, timestepper->mastereq->nessential, timestepper->total_time, gate_rot_freq, gate_param);
+    else if (target_str[1].compare("swap0q") == 0) targetgate = new SWAP_0Q(timestepper->mastereq->nlevels, timestepper->mastereq->nessential, timestepper->total_time, gate_rot_freq, gate_param);
+    else if (target_str[1].compare("cqnot") == 0) targetgate = new CQNOT(timestepper->mastereq->nlevels, timestepper->mastereq->nessential, timestepper->total_time, gate_rot_freq, gate_param);
+    else if (target_str[1].compare("testgate") == 0) targetgate = new TestGate(timestepper->mastereq->nlevels, timestepper->mastereq->nessential, timestepper->total_time, gate_rot_freq, gate_param);
     else {
       printf("\n\n ERROR: Unnown gate type: %s.\n", target_str[1].c_str());
-      printf(" Available gates are 'none', 'xgate', 'ygate', 'zgate', 'hadamard', 'cnot', 'swap', 'swap0q', 'cqnot'.\n");
+      printf(" Available gates are 'none', 'xgate', 'ygate', 'zgate', 'hadamard', 'cnot', 'swap', 'swap0q', 'cqnot', 'testgate'.\n");
       exit(1);
-    } 
-  }  
+    }
+  }
   else if (target_str[0].compare("pure")==0) {
     target_type = TargetType::PURE;
     purestateID = 0;
@@ -103,8 +104,8 @@ OptimProblem::OptimProblem(MapParam config, TimeStepper* timestepper_, MPI_Comm 
       }
     }
     // printf("Preparing the state e_%d\n", purestateID);
-  } 
-  else if (target_str[0].compare("file")==0) { 
+  }
+  else if (target_str[0].compare("file")==0) {
     // Get the name of the file and pass it to the OptimTarget class later.
     target_type = TargetType::FROMFILE;
     assert(target_str.size() >= 2);
@@ -135,14 +136,14 @@ OptimProblem::OptimProblem(MapParam config, TimeStepper* timestepper_, MPI_Comm 
   if (obj_weights.size() < ninit) nfill = ninit - obj_weights.size();
   double val = obj_weights[obj_weights.size()-1];
   if (obj_weights.size() < ninit){
-    for (int i = 0; i < nfill; i++) 
+    for (int i = 0; i < nfill; i++)
       obj_weights.push_back(val);
   }
   assert(obj_weights.size() >= ninit);
   double sendbuf[obj_weights.size()];
   double recvbuf[obj_weights.size()];
   for (int i = 0; i < obj_weights.size(); i++) sendbuf[i] = obj_weights[i];
-  // Distribute over mpi_init processes 
+  // Distribute over mpi_init processes
   int nscatter = ninit_local;
   MPI_Scatter(sendbuf, nscatter, MPI_DOUBLE, recvbuf, nscatter,  MPI_DOUBLE, 0, comm_init);
   for (int i = 0; i < nscatter; i++) obj_weights[i] = recvbuf[i];
@@ -173,14 +174,14 @@ OptimProblem::OptimProblem(MapParam config, TimeStepper* timestepper_, MPI_Comm 
   }
 
   /* Allocate the initial condition vector */
-  VecCreate(PETSC_COMM_WORLD, &rho_t0); 
+  VecCreate(PETSC_COMM_WORLD, &rho_t0);
   VecSetSizes(rho_t0,PETSC_DECIDE,2*timestepper->mastereq->getDim());
   VecSetFromOptions(rho_t0);
   PetscInt ilow, iupp;
   VecGetOwnershipRange(rho_t0, &ilow, &iupp);
 
   /* If PURE or FROMFILE or ENSEMBLE initialization, store them here. Otherwise they are set inside evalF */
-  if (initcond_type == InitialConditionType::PURE) { 
+  if (initcond_type == InitialConditionType::PURE) {
     /* Initialize with tensor product of unit vectors. */
 
     // Compute index of diagonal elements that is one.
@@ -205,9 +206,9 @@ OptimProblem::OptimProblem(MapParam config, TimeStepper* timestepper_, MPI_Comm 
     int vec_id = getIndexReal(getVecID( diag_id, diag_id, ndim )); // Real part of x
     if (ilow <= vec_id && vec_id < iupp) VecSetValue(rho_t0, vec_id, 1.0, INSERT_VALUES);
   }
-  else if (initcond_type == InitialConditionType::FROMFILE) { 
+  else if (initcond_type == InitialConditionType::FROMFILE) {
     /* Read initial condition from file */
-    
+
     // int dim = timestepper->mastereq->getDim();
     int dim_ess = timestepper->mastereq->getDimEss();
     int dim_rho = timestepper->mastereq->getDimRho();
@@ -234,7 +235,7 @@ OptimProblem::OptimProblem(MapParam config, TimeStepper* timestepper_, MPI_Comm 
     delete [] vec;
   } else if (initcond_type == InitialConditionType::ENSEMBLE) {
     // Sanity check for the list in initcond_IDs!
-    assert(initcond_IDs.size() >= 1); // at least one element 
+    assert(initcond_IDs.size() >= 1); // at least one element
     assert(initcond_IDs[initcond_IDs.size()-1] < timestepper->mastereq->getNOscillators()); // last element can't exceed total number of oscillators
     for (int i=0; i < initcond_IDs.size()-1; i++){ // list should be consecutive!
       if (initcond_IDs[i]+1 != initcond_IDs[i+1]) {
@@ -250,7 +251,7 @@ OptimProblem::OptimProblem(MapParam config, TimeStepper* timestepper_, MPI_Comm 
     // get dimension of subsystems defined by initcond_IDs
     int dimsub = 1;
     for (int i=0; i<initcond_IDs.size(); i++){
-      dimsub *= timestepper->mastereq->getOscillator(initcond_IDs[i])->getNLevels();  
+      dimsub *= timestepper->mastereq->getOscillator(initcond_IDs[i])->getNLevels();
     }
     // printf("dimpre %d sub %d post %d \n", dimpre, dimsub, dimpost);
     int dimrho = timestepper->mastereq->getDimRho();
@@ -275,7 +276,7 @@ OptimProblem::OptimProblem(MapParam config, TimeStepper* timestepper_, MPI_Comm 
           elemid_im = getIndexImag(getVecID(jfull, ifull, dimrho));
           if (ilow <= elemid_re && elemid_re < iupp) VecSetValue(rho_t0, elemid_re,  0.5/(dimsub*dimsub), INSERT_VALUES);
           if (ilow <= elemid_im && elemid_im < iupp) VecSetValue(rho_t0, elemid_im, -0.5/(dimsub*dimsub), INSERT_VALUES);
-        } 
+        }
       }
     }
   }
@@ -317,7 +318,7 @@ OptimProblem::OptimProblem(MapParam config, TimeStepper* timestepper_, MPI_Comm 
   }
   VecAssemblyBegin(xlower); VecAssemblyEnd(xlower);
   VecAssemblyBegin(xupper); VecAssemblyEnd(xupper);
- 
+
   /* Create Petsc's optimization solver */
   TaoCreate(PETSC_COMM_WORLD, &tao);
   /* Set optimization type and parameters */
@@ -360,7 +361,7 @@ double OptimProblem::evalF(const Vec x) {
   Vec finalstate = NULL;
 
   /* Pass design vector x to oscillators */
-  mastereq->setControlAmplitudes(x); 
+  mastereq->setControlAmplitudes(x);
 
   /*  Iterate over initial condition */
   obj_cost  = 0.0;
@@ -369,7 +370,7 @@ double OptimProblem::evalF(const Vec x) {
   fidelity = 0.0;
   double obj_cost_max = 0.0;
   for (int iinit = 0; iinit < ninit_local; iinit++) {
-      
+
     /* Prepare the initial condition in [rank * ninit_local, ... , (rank+1) * ninit_local - 1] */
     int iinit_global = mpirank_init * ninit_local + iinit;
     int initid = timestepper->mastereq->getRhoT0(iinit_global, ninit, initcond_type, initcond_IDs, rho_t0);
@@ -445,7 +446,7 @@ void OptimProblem::evalGradF(const Vec x, Vec G){
   Vec finalstate = NULL;
 
   /* Pass design vector x to oscillators */
-  mastereq->setControlAmplitudes(x); 
+  mastereq->setControlAmplitudes(x);
 
   /* Reset Gradient */
   VecZeroEntries(G);
@@ -473,11 +474,11 @@ void OptimProblem::evalGradF(const Vec x, Vec G){
     // if (mpirank_braid == 0) printf("%d: %d FWD. ", mpirank_init, initid);
 
     /* Run forward with initial condition rho_t0 */
-#ifdef WITH_BRAID 
+#ifdef WITH_BRAID
       primalbraidapp->PreProcess(initid, rho_t0, 0.0);
       primalbraidapp->Drive();
       finalstate = primalbraidapp->PostProcess(); // this return NULL for all but the last time processor
-#else 
+#else
       finalstate = timestepper->solveODE(initid, rho_t0);
 #endif
 
@@ -538,7 +539,7 @@ void OptimProblem::evalGradF(const Vec x, Vec G){
   objective = obj_cost + obj_regul + obj_penal;
 
   /* Sum up the gradient from all initial condition processors */
-  PetscScalar* grad; 
+  PetscScalar* grad;
   VecGetArray(G, &grad);
   for (int i=0; i<ndesign; i++) {
     mygrad[i] = grad[i];
@@ -614,7 +615,7 @@ void OptimProblem::getStartingPoint(Vec xinit){
     }
     delete [] randvec;
 
-  }  else { // Read from file 
+  }  else { // Read from file
     double* vecread = new double[ndesign];
 
     if (mpirank_world == 0) read_vector(initguess_type.c_str(), vecread, ndesign);
@@ -647,7 +648,7 @@ void OptimProblem::getStartingPoint(Vec xinit){
 
   /* Pass to oscillator */
   timestepper->mastereq->setControlAmplitudes(xinit);
-  
+
   /* Write initial control functions to file */
   output->writeControls(xinit, timestepper->mastereq, timestepper->ntime, timestepper->dt);
 
@@ -655,7 +656,7 @@ void OptimProblem::getStartingPoint(Vec xinit){
 
 
 void OptimProblem::getSolution(Vec* param_ptr){
-  
+
   /* Get ref to optimized parameters */
   Vec params;
   TaoGetSolutionVector(tao, &params);
@@ -706,7 +707,7 @@ PetscErrorCode TaoEvalObjective(Tao tao, Vec x, PetscReal *f, void*ptr){
 
   OptimProblem* ctx = (OptimProblem*) ptr;
   *f = ctx->evalF(x);
-  
+
   return 0;
 }
 
@@ -715,6 +716,6 @@ PetscErrorCode TaoEvalGradient(Tao tao, Vec x, Vec G, void*ptr){
 
   OptimProblem* ctx = (OptimProblem*) ptr;
   ctx->evalGradF(x, G);
-  
+
   return 0;
 }

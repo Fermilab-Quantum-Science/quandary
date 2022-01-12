@@ -3,7 +3,7 @@
 #endif
 #include "timestepper.hpp"
 #include "bspline.hpp"
-#include "oscillator.hpp" 
+#include "oscillator.hpp"
 #include "mastereq.hpp"
 #include "config.hpp"
 #include <stdlib.h>
@@ -50,6 +50,9 @@ int main(int argc,char **argv)
   int ntime = config.GetIntParam("ntime", 1000);
   double dt    = config.GetDoubleParam("dt", 0.01);
   int nspline = config.GetIntParam("nspline", 10);
+
+  double gate_param    = config.GetDoubleParam("gate_param", 0.01);
+
   RunType runtype;
   std::string runtypestr = config.GetStrParam("runtype", "simulation");
   if      (runtypestr.compare("simulation")      == 0) runtype = RunType::SIMULATION;
@@ -60,8 +63,8 @@ int main(int argc,char **argv)
     runtype = RunType::NONE;
   }
 
-  /* Get the number of essential levels per oscillator. 
-   * Default: same as number of levels */  
+  /* Get the number of essential levels per oscillator.
+   * Default: same as number of levels */
   std::vector<int> nessential(nlevels.size());
   for (int iosc = 0; iosc<nlevels.size(); iosc++) nessential[iosc] = nlevels[iosc];
   /* Overwrite if config option is given */
@@ -85,7 +88,7 @@ int main(int argc,char **argv)
   else if (initcondstr[0].compare("ensemble") == 0 ) ninit = 1;
   else if (initcondstr[0].compare("3states") == 0 ) ninit = 3;
   else if (initcondstr[0].compare("Nplus1") == 0 )  {
-    // compute system dimension N 
+    // compute system dimension N
     ninit = 1;
     for (int i=0; i<nlevels.size(); i++){
       ninit *= nlevels[i];
@@ -120,15 +123,15 @@ int main(int argc,char **argv)
   /* Get the size of communicators  */
 #ifdef WITH_BRAID
   int np_braid = config.GetIntParam("np_braid", 1);
-  np_braid = min(np_braid, mpisize_world); 
-#else 
-  int np_braid = 1; 
+  np_braid = min(np_braid, mpisize_world);
+#else
+  int np_braid = 1;
 #endif
-  int np_init  = min(ninit, config.GetIntParam("np_init", 1)); 
-  np_init  = min(np_init,  mpisize_world); 
+  int np_init  = min(ninit, config.GetIntParam("np_init", 1));
+  np_init  = min(np_init,  mpisize_world);
   int np_petsc = mpisize_world / (np_init * np_braid);
 
-  /* Sanity check for communicator sizes */ 
+  /* Sanity check for communicator sizes */
   if (ninit % np_init != 0){
     printf("ERROR: Wrong processor distribution! \n Size of communicator for distributing initial conditions (%d) must be integer divisor of the total number of initial conditions (%d)!!\n", np_init, ninit);
     exit(1);
@@ -139,7 +142,7 @@ int main(int argc,char **argv)
   }
 
   /* Split communicators */
-  // Distributed initial conditions 
+  // Distributed initial conditions
   int color_init = mpirank_world % (np_petsc * np_braid);
   MPI_Comm_split(MPI_COMM_WORLD, color_init, mpirank_world, &comm_init);
   MPI_Comm_rank(comm_init, &mpirank_init);
@@ -151,7 +154,7 @@ int main(int argc,char **argv)
   MPI_Comm_split(MPI_COMM_WORLD, color_braid, mpirank_world, &comm_braid);
   MPI_Comm_rank(comm_braid, &mpirank_braid);
   MPI_Comm_size(comm_braid, &mpisize_braid);
-#else 
+#else
   mpirank_braid = 0;
   mpisize_braid = 1;
 #endif
@@ -184,21 +187,21 @@ int main(int argc,char **argv)
 
   /* --- Initialize the Oscillators --- */
   Oscillator** oscil_vec = new Oscillator*[nlevels.size()];
-  // Get fundamental and rotation frequencies from config file 
+  // Get fundamental and rotation frequencies from config file
   std::vector<double> trans_freq, rot_freq;
   config.GetVecDoubleParam("transfreq", trans_freq, 1e20);
   if (trans_freq.size() < nlevels.size()) {
     printf("Error: Number of given fundamental frequencies (%lu) is smaller than the the number of oscillators (%lu)\n", trans_freq.size(), nlevels.size());
     exit(1);
-  } 
+  }
   config.GetVecDoubleParam("rotfreq", rot_freq, 1e20);
   if (rot_freq.size() < nlevels.size()) {
     printf("Error: Number of given rotation frequencies (%lu) is smaller than the the number of oscillators (%lu)\n", rot_freq.size(), nlevels.size());
     exit(1);
-  } 
+  }
   // Get self kerr coefficient
   std::vector<double> selfkerr;
-  config.GetVecDoubleParam("selfkerr", selfkerr, 0.0);   // self ker \xi_k 
+  config.GetVecDoubleParam("selfkerr", selfkerr, 0.0);   // self ker \xi_k
   assert(selfkerr.size() >= nlevels.size());
   // Get lindblad type and collapse times
   std::string lindblad = config.GetStrParam("collapse_type", "none");
@@ -220,7 +223,7 @@ int main(int argc,char **argv)
     assert(dephase_time.size() >= nlevels.size());
   }
 
-  // Create the oscillators 
+  // Create the oscillators
   for (int i = 0; i < nlevels.size(); i++){
     std::vector<double> carrier_freq;
     std::string key = "carrier_frequency" + std::to_string(i);
@@ -259,7 +262,7 @@ int main(int argc,char **argv)
   }
 
   /* --- Initialize the Master Equation  --- */
-  // Get self and cross kers and coupling terms 
+  // Get self and cross kers and coupling terms
   std::vector<double> crosskerr, Jkl;
   config.GetVecDoubleParam("crosskerr", crosskerr, 0.0);   // cross ker \xi_{kl}, zz-coupling
   config.GetVecDoubleParam("Jkl", Jkl, 0.0); // Jaynes-Cummings coupling
@@ -269,7 +272,7 @@ int main(int argc,char **argv)
   for (int i = Jkl.size(); i < (noscillators-1) * noscillators / 2; i++) Jkl.push_back(0.0);
   // Sanity check for matrix free solver
   bool usematfree = config.GetBoolParam("usematfree", false);
-  if ( (usematfree && nlevels.size() < 2) ||   
+  if ( (usematfree && nlevels.size() < 2) ||
        (usematfree && nlevels.size() > 5)   ){
         printf("Warning: Matrix free solver is only implemented for systems with 2, 3, 4, or 5 oscillators. Switching to sparse-matrix solver now.\n");
         usematfree = false;
@@ -293,11 +296,11 @@ int main(int argc,char **argv)
   /* Output */
 #ifdef WITH_BRAID
   Output* output = new Output(config, comm_petsc, comm_init, comm_braid, noscillators);
-#else 
+#else
   Output* output = new Output(config, comm_petsc, comm_init, noscillators);
 #endif
 
-  // Some screen output 
+  // Some screen output
   if (mpirank_world == 0) {
     std::cout << "Time: [0:" << total_time << "], ";
     std::cout << "N="<< ntime << ", dt=" << dt << std::endl;
@@ -342,28 +345,28 @@ int main(int argc,char **argv)
   // TS ts;
   // TSCreate(PETSC_COMM_WORLD,&ts);CHKERRQ(ierr);
   // TSInit(ts, mastereq, ntime, dt, total_time, x, false);
-   
+
 
 #ifdef WITH_BRAID
   /* --- Create braid instances --- */
   myBraidApp* primalbraidapp = NULL;
   myAdjointBraidApp *adjointbraidapp = NULL;
-  // Create primal app always, adjoint only if runtype is adjoint or optimization 
+  // Create primal app always, adjoint only if runtype is adjoint or optimization
   primalbraidapp = new myBraidApp(comm_braid, total_time, ntime, mytimestepper, mastereq, &config, output);
   if (runtype == RunType::GRADIENT || runtype == RunType::OPTIMIZATION) adjointbraidapp = new myAdjointBraidApp(comm_braid, total_time, ntime, mytimestepper, mastereq, &config, primalbraidapp->getCore(), output);
   // Initialize the braid time-grids. Warning: initGrids for primal app depends on initialization of adjoint! Do not move this line up!
   primalbraidapp->InitGrids();
   if (runtype == RunType::GRADIENT || runtype == RunType::OPTIMIZATION) adjointbraidapp->InitGrids();
-  
+
 #endif
 
   /* --- Initialize optimization --- */
   /* Get gate rotation frequencies. Default: use rotational frequencies for the gate. */
-  std::vector<double> gate_rot_freq(noscillators); 
+  std::vector<double> gate_rot_freq(noscillators);
   for (int iosc=0; iosc<noscillators; iosc++) gate_rot_freq[iosc] = rot_freq[iosc];
   /* If gate_rot_freq option is given in config file, overwrite them with input */
   std::vector<double> read_gate_rot;
-  config.GetVecDoubleParam("gate_rot_freq", read_gate_rot, 1e20); 
+  config.GetVecDoubleParam("gate_rot_freq", read_gate_rot, 1e20);
   if (read_gate_rot[0] < 1e20) { // the config option exists
     for (int i=0; i<noscillators; i++) {
       if (i < read_gate_rot.size()) gate_rot_freq[i] = read_gate_rot[i];
@@ -372,9 +375,9 @@ int main(int argc,char **argv)
   }
 
 #ifdef WITH_BRAID
-  OptimProblem* optimctx = new OptimProblem(config, mytimestepper, primalbraidapp, adjointbraidapp, comm_init, ninit, gate_rot_freq, output);
-#else 
-  OptimProblem* optimctx = new OptimProblem(config, mytimestepper, comm_init, ninit, gate_rot_freq, output);
+  OptimProblem* optimctx = new OptimProblem(config, mytimestepper, primalbraidapp, adjointbraidapp, comm_init, ninit, gate_rot_freq, gate_param, output);
+#else
+  OptimProblem* optimctx = new OptimProblem(config, mytimestepper, comm_init, ninit, gate_rot_freq, gate_param, output);
 #endif
 
   /* Set upt solution and gradient vector */
@@ -413,8 +416,8 @@ int main(int argc,char **argv)
     objective = optimctx->evalF(xinit);
     if (mpirank_world == 0) printf("\nTotal objective = %1.14e, \n", objective);
     optimctx->getSolution(&opt);
-  } 
-  
+  }
+
   /* --- Solve adjoint --- */
   if (runtype == RunType::GRADIENT) {
     optimctx->getStartingPoint(xinit);
@@ -492,7 +495,7 @@ int main(int argc,char **argv)
   if (mpirank_world == 0) printf("\nRunning optimizer eval_grad_f...\n");
   optimctx->evalGradF(xinit, grad);
   VecView(grad, PETSC_VIEWER_STDOUT_WORLD);
-  
+
 
   /* --- Finite Differences --- */
   if (mpirank_world == 0) printf("\nFD...\n");
@@ -510,7 +513,7 @@ int main(int argc,char **argv)
     /* Eval FD and error */
     double fd = (obj_pert1 - obj_pert2) / (2.*EPS);
     double err = 0.0;
-    double gradi; 
+    double gradi;
     VecGetValues(grad, 1, &i, &gradi);
     if (fd != 0.0) err = (gradi - fd) / fd;
     if (mpirank_world == 0) printf(" %d: obj %1.14e, obj_pert1 %1.14e, obj_pert2 %1.14e, fd %1.14e, grad %1.14e, err %1.14e\n", i, obj_org, obj_pert1, obj_pert2, fd, gradi, err);
@@ -518,7 +521,7 @@ int main(int argc,char **argv)
     /* Restore parameter */
     VecSetValue(xinit, i, EPS, ADD_VALUES);
   }
-  
+
 #endif
 
 
@@ -539,8 +542,8 @@ int main(int argc,char **argv)
     VecGetValues(xinit, 1, &i, &xi);
     VecGetValues(optimctx->xlower, 1, &i, &blower);
     VecGetValues(optimctx->xupper, 1, &i, &bupper);
-    // compare 
-    if (fabs(xi - blower) < bound_tol || 
+    // compare
+    if (fabs(xi - blower) < bound_tol ||
         fabs(xi - bupper) < bound_tol  ) {
           printf("Parameter %d hits bound: x=%f\n", i, xi);
     } else {
@@ -566,12 +569,12 @@ int main(int argc,char **argv)
     printf("Computing column %d\n", j);
 
     /* Evaluate \nabla_x J(x + eps * e_j) */
-    VecSetValue(xinit, j, EPS, ADD_VALUES); 
-    optimctx->evalGradF(xinit, grad);        
+    VecSetValue(xinit, j, EPS, ADD_VALUES);
+    optimctx->evalGradF(xinit, grad);
     VecCopy(grad, grad1);
 
     /* Evaluate \nabla_x J(x - eps * e_j) */
-    VecSetValue(xinit, j, -2.*EPS, ADD_VALUES); 
+    VecSetValue(xinit, j, -2.*EPS, ADD_VALUES);
     optimctx->evalGradF(xinit, grad);
     VecCopy(grad, grad2);
 
@@ -593,7 +596,7 @@ int main(int argc,char **argv)
   /* Assemble the Hessian */
   MatAssemblyBegin(Hess, MAT_FINAL_ASSEMBLY);
   MatAssemblyEnd(Hess, MAT_FINAL_ASSEMBLY);
-  
+
   /* Clean up */
   VecDestroy(&grad1);
   VecDestroy(&grad2);
@@ -613,7 +616,7 @@ int main(int argc,char **argv)
   MatAXPY(Hess, 1.0, HessT, SAME_NONZERO_PATTERN);
 
   /* --- Print Hessian to file */
-  
+
   sprintf(filename, "%s/hessian.dat", output->datadir.c_str());
   printf("File written: %s.\n", filename);
   PetscViewer viewer;
@@ -637,7 +640,7 @@ int main(int argc,char **argv)
 
 #endif
 
-#if HESSIAN_DECOMPOSITION 
+#if HESSIAN_DECOMPOSITION
   /* --- Compute eigenvalues of Hessian --- */
   printf("\n\n#########################\n");
   printf(" Eigenvalue analysis... \n");
@@ -663,9 +666,9 @@ int main(int argc,char **argv)
 
   /* Set the percentage of eigenpairs that should be computed */
   double frac = 1.0;  // 1.0 = 100%
-  int neigvals = nrows * frac;     // hopefully rounds to closest int 
+  int neigvals = nrows * frac;     // hopefully rounds to closest int
   printf("\nComputing %d eigenpairs now...\n", neigvals);
-  
+
   /* Compute eigenpair */
   std::vector<double> eigvals;
   std::vector<Vec> eigvecs;
@@ -676,7 +679,7 @@ int main(int argc,char **argv)
   sprintf(filename, "%s/eigvals.dat", output->datadir.c_str());
   file =fopen(filename,"w");
   for (int i=0; i<eigvals.size(); i++){
-      fprintf(file, "% 1.8e\n", eigvals[i]);  
+      fprintf(file, "% 1.8e\n", eigvals[i]);
   }
   fclose(file);
   printf("File written: %s.\n", filename);
@@ -688,7 +691,7 @@ int main(int argc,char **argv)
     for (PetscInt i=0; i<eigvals.size(); i++){
       double val;
       VecGetValues(eigvecs[i], 1, &j, &val); // j-th row of eigenvalue i
-      fprintf(file, "% 1.8e  ", val);  
+      fprintf(file, "% 1.8e  ", val);
     }
     fprintf(file, "\n");
   }
@@ -729,5 +732,3 @@ int main(int argc,char **argv)
   MPI_Finalize();
   return ierr;
 }
-
-
